@@ -53,17 +53,21 @@ dotnet run
 
 ## Course Detail
 
-Source: [Pluralsight](http://www.pluralsight.com/)
-Name: [Building Your First API with ASP.NET Core](https://app.pluralsight.com/library/courses/asp-dotnet-core-api-building-first/description)
-Author: Kevin Dockx
-Level: Beginner
+| | |
+| --- | --- |
+| Source | [Pluralsight](http://www.pluralsight.com/) |
+| Name | [Building Your First API with ASP.NET Core] (https://app.pluralsight.com/library/courses/asp-dotnet-core-api-building-first/description) |
+| Author | Kevin Dockx |
+| Level | Beginner |
 
 ## Environment Detail
 
-OS: Windows 10 Home Single Language
-Type: 64 bits
-Processor: i7-7500U CPU @ 2.70GHz 2.90GHz
-RAM: 16,0 GB
-IDE: Microsoft Visual Studio Community 2017 v15.7.4
-Microsoft .NET Framework v4.7.02046
-SQL Server Data Tools v15.1.61804.210
+| | |
+| - | - |
+| OS | Windows 10 Home Single Language |
+| Type | 64 bits |
+| Processor | i7-7500U CPU @ 2.70GHz 2.90GHz |
+| RAM | 16,0 GB |
+| IDE | Microsoft Visual Studio Community 2017 v15.7.4 |
+| | Microsoft .NET Framework v4.7.02046 |
+| | SQL Server Data Tools v15.1.61804.210 |
