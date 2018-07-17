@@ -194,3 +194,72 @@ In order to udpate the entities you also can use two strategies: delete and inse
 * Learn how to affect the mappings
 * Adding the child entity in one-to-one
 * Removing or replacing the child entity
+
+```csharp
+public class Samurai // Principal
+{
+    public Samurai()
+    {
+        SamuraiBattles = new List<SamuraiBattle>();
+    }
+    public int Id {get; set;}
+    public string Name {get; set;}
+    public List<SamuraiBattle> SamuraiBattles {get; set;}
+    public SecretIdentity SecretIdentity {get; set;}
+}
+public class SecretIdentity // Dependent
+{
+    public int Id {get; set;}
+    public string RealName {get; set;}
+    public int SamuraiId {get; set;} // FK in EF Core Convention
+}
+```
+
+`SecretIdentity` must always have a parent, `SamuraiId` is a non-nullable int.
+
+To allow `SamuraiId` be null, put the `?` symbol after type. But it break the rules of one-to-one relationship.
+```csharp
+public class SecretIdentity // Dependent
+{
+    public int Id {get; set;}
+    public string RealName {get; set;}
+    public int? SamuraiId {get; set;} // can be null
+}
+```
+
+For the other hand, if you desire enforce that `Samurai` must have a `SecretIdentity` you have to handle with this by your own, in your business logic.
+
+For example, you can pass the `SecretName` by constructor:
+```csharp
+public class Samurai
+{
+    public Samurai()
+    {
+        SamuraiBattles = new List<SamuraiBattle>();
+    }
+    public Samurai(string publicName, string secretName):this ()
+    {
+        Name = publicName;
+        SecretIdentity = new SecretIdentity { RealName = secretName };
+    }
+    public int Id {get; set;}
+    public string Name {get; set;}
+    public List<SamuraiBattle> SamuraiBattles {get; set;}
+    public SecretIdentity SecretIdentity {get; set;}
+}
+```
+
+In order to allow navigation to `Samurai` object from `SecretIdentity` declare a Sumurai property. EF Core you identify the FK and will load the Samurai properly.
+```csharp
+public class SecretIdentity // Dependent
+{
+    public int Id {get; set;}
+    public string RealName {get; set;}
+    public Samurai Samurai {get; set;}
+    public int SamuraiId {get; set;} 
+}
+```
+
+If you don't want to have the `SamuraiId` Foreign Key in the class, then you must have to explicitly declare the relationship in DbContext configuration. However this approach increases the complexity unnecessarily.
+
+Stay aware that the Nullability of FK property affects EF behavior.
