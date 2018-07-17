@@ -367,3 +367,224 @@ public override int SaveChanges()
     return base.SaveChanges();
 }
 ```
+
+## Owned Types
+
+* Benefits of the owned type mapping
+* Create and map an owned type
+* Retrieving and updating entities with owned type properties
+* Learn workarounds to some current shortcomings
+* Map a DDD value object as an owned type
+
+Representation of custom type:
+```csharp
+public class PersonName
+{
+    public PersonName(string givenName, string surName)
+    {
+        SurName = surName;
+        GivenName = givenName;
+    }
+    public string GivenName {get; set;}
+    public string SurName {get; set;}
+    public string FullName => $"{GivenName} {SurName}";
+    public string FullNameReverse => $"{SurName}, {GivenName}";
+}
+```
+
+Use of PersonName custom type in the business types
+```csharp
+public class Samurai
+{
+    public int Id {get; set;}
+    public PersonName BetterName {get; set;} // sub type
+}
+public class Contact
+{
+    public int Id {get; set;}
+    public PersonName BetterName {get; set;} // sub type
+}
+```
+
+In a doc no-SQL database, this kind of entity is easy persisted. But in the related database can be difficult to map this kind of composition. However, EF Core already has a feature to address this problem and transform subtypes properties in plain flat properties of the parent.
+
+Here is how to register owned type in model configuration:
+```csharp
+// hided for brevity
+modelBuilder.Entity<Samurai>().OwnsOne(s => s.BetterName);
+```
+
+This will produce the properties in the parent entity:
+```
+"BetterName_GivenName",
+"BetterName_SurName"
+```
+
+You can register a custom column name:
+```csharp
+modelBuilder.Entity<Samurai>().OwnsOne(s => s.BetterName).Property(b => b.GivenName).HasColumnName("GivenName");
+modelBuilder.Entity<Samurai>().OwnsOne(s => s.BetterName).Property(b => b.SurName).HasColumnName("SurName");
+```
+
+Or you can split in two tables:
+```csharp
+modelBuilder.Entity<Samurai>().OwnsOne(s => s.BetterName).ToTable("BatterNames");
+```
+
+This way the EF Core will infer the relationship and you have to do nothing more in your queries.
+
+For the other hand, you must declare a private constructor without parameters in order to allow the mapper component to map the subtype by reflection.
+```csharp
+public class PersonName
+{
+    public PersonName(string givenName, string surName)
+    {
+        SurName = surName;
+        GivenName = givenName;
+    }
+    private PersonName() {} // only reflection will see this
+    // properties hided for brevity
+}
+```
+
+***
+
+:warning: An error occur when saving a new Samurai with PersonName.
+
+**Problem** - `ModelBuilder` understands that owned types are not entities. `Change Tracker` does not understand this!
+
+How to solve this problem in the overridden method `SaveChanges`:
+```csharp
+//hided for brevity
+foreach (var entry in ChangeTracker.Entries()
+    .Where(e => (e.State==EntityState.Added || e.State==EntityState.Modified) && !e.Metadata.IsOwned()))
+    {
+        // hided for brevity
+    }
+// continue
+```
+
+***
+
+:warning: Even when your business logic doesn't care if the subtypes are null, the `ChangeTracker` not allow that `owned` types be persisted with null values.
+
+**Workaround**
+
+In the Owned Type Class:
+* Factory methods: Create() & Empty()
+* Private Constructor
+* IsEmpty Property
+
+```csharp
+// PersonName class
+// surrounded code hided for brevity
+public static PersonName Create(string givenName, string surName)
+{
+    return new PersonName(givenName, surName);
+}
+public static PersonName Empty()
+{
+    return new PersonName("", "");
+}
+private PersonName(string givenName, string surName)
+{
+    SurName = surName;
+    GivenName = givenName;
+}
+public bool IsEmpty()
+{
+    return SurName == "" & GivenName == "";
+}
+```
+
+In the overridden method `SavedChanges`:
+
+```csharp
+public override int SaveChanges()
+{
+    ChangeTracker.DetectChanges();
+    var timestamp = DateTime.Now;
+    foreach (var entry in ChangeTracker.Entries()
+        .Where(e => (e.State==EntityState.Added || e.State==EntityState.Modified) && !e.Metadata.IsOwned()))
+    {
+        entry.Property("LastModified").CurrentValue = timestamp;
+
+        if (entry.State==EntityState.Added)
+        {
+            entry.Property("Created").CurrentValue = timestamp;
+        }
+        // workaround
+        if (entry.Entity is Samurai)
+        {
+            if (entry.Reference("BetterName").CurrentValue == null)
+            {
+                entry.Reference("BetterName").CurrentValue = PersonName.Empty();
+            }
+        }
+    }
+    return base.SaveChanges();
+}
+```
+
+And if you desire more consistency, you can turn the PensonName null again when retrieve the data from the database:
+```csharp
+private static void FixUpNullBetterName()
+{
+    _context = new SamuraiContext();
+    var samurai = _context.Samurais.FirstOrDefault(s => s.Name == "Chrisjen");
+    if (samurai is null) { return; }
+    if (samurai.BetterName.IsEmpty())
+    {
+        samurai.BetterName = null;
+    }
+}
+```
+
+***
+
+:warning: EF Core does not understand *replacing* owned type properties
+
+```csharp
+private static void ReplaceBetterName()
+{
+    var samurai = _context.Samurais.FirstOrDefault();
+    samurai.BetterName = PersonName.Create("Shohreh", "Aghdashloo");
+    _context.SaveChanges();
+}
+```
+
+What happens is the `PersonName` object will always exist, even if empty. And when trying to add a new one, the `ChangeTracker` that already aware of one object, will be confused about the new one.
+
+You'll need to help EF Core understand owned type replacements:
+```csharp
+// workaround in SaveChanges method
+if (entry.Entity is Samurai)
+{
+    if (entry.Reference("BetterName").CurrentValue == null)
+    {
+        entry.Reference("BetterName").CurrentValue = PersonName.Empty();
+    }
+    entry.Reference("BetterName").TargetEntry.State = entry.State; // set the samurai state to PersonName state
+}
+```
+
+If the object is **untracked**, access the `ChangeTracker` by `Update` and the EF Core will easily handle the update.
+```csharp
+_context.Samurais.Update(samurai)
+```
+
+However, if the object is **tracked**, detach the `PersonName` entity from `Samurai` entity.
+```csharp
+_context.Entry(samurai)
+    .Reference(s => s.BetterName)
+    .TargetEntry.State = EntityState.Detached;
+
+// Set the new property now
+samurai.BetterName = PersonName.Create("A", "B");
+
+// DbSet.Update
+_context.Samurais.Update(samurai);
+
+// Then SaveChanges
+_context.SaveChanges() // here the overridden method will identify the change in samurai state and for consequence, the state of PersonName as well
+```
