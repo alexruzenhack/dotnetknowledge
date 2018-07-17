@@ -263,3 +263,107 @@ public class SecretIdentity // Dependent
 If you don't want to have the `SamuraiId` Foreign Key in the class, then you must have to explicitly declare the relationship in DbContext configuration. However this approach increases the complexity unnecessarily.
 
 Stay aware that the Nullability of FK property affects EF behavior.
+
+## Shadow Properties
+
+* Define shadow properties in mpappings
+* Populate shadow properties
+* Use or retrieve them in queries
+
+The ability to persist data not defined. An application can be "audit information about how and when data was stored".
+
+Entity defined:
+```csharp
+public class Samurai
+{
+    public int Id {get; set;}
+    public string Name {get; set;}
+}
+```
+
+Entity reflected in database:
+| Column Name | Data type |
+| ----------- | --------- |
+| Id | int |
+| Name | nvarchar(MAX) |
+| LastModified | datetime |
+
+We don't wanna show the property `LastModified` to the client.
+
+You can define the shadow property in the DbContex configuration:
+```csharp
+modelBuilder.Entity<Samurai>()
+    .Property<DateTime>("LastModified");
+```
+
+You can populate data in:
+```csharp
+_context.Entry(samurai)
+    .Property("LastModified").CurrentValue = DateTime.Now;
+```
+
+You can even query by EF.Property:
+```csharp
+_context.Samurais
+        .OrderBy(s => EF.Property<DateTime>(s, "LastModified"));
+```
+
+A real example:
+```csharp
+// hided for brevity
+private static void CreateSamurai()
+{
+    var samurai = new Samurai { Name="Ronin" };
+    _context.Samurais.Add(samurai);
+    var timestamp = DateTime.Now;
+    _context.Entry(samurai).Property("Created").CurrentValue = timestamp;
+    _context.Entry(samurai).Property("LastModified").CurrentValue = timestamp;
+    _context.SaveChanges();
+}
+```
+
+You can load an anonymous type that consist of the `Id`, `Name` and the `Create` date from the database.
+
+```csharp
+private static void RetrieveSamuraisCreatedInPastWeek()
+{
+    var oneWeekAgo = DateTime.Now.AddDays(-7);
+    var newSamurais = _context.Samurais
+                                .Where(s => EF.Property<DateTime>(s, "Created") >= oneWeekAgo)
+                                .ToList();
+    
+    var samuraisCreated = _context.Samurais
+                                .Where(s => EF.Property<DateTime>(s, "Created") >= oneWeekAgo)
+                                .Select(s => new {s.Id, s.Name, Created=EF.Property<DateTime>(s,"Created")})
+                                .ToList();
+}
+```
+
+How to apply shadow properties to all defined entity data:
+```csharp
+foreach (var entityType in modelBuilder.Model.GetEntityTypes())
+{
+    modelBuilder.Entity(entityType.Name).Property<DateTime>("Created");
+    modelBuilder.Entity(entityType.Name).Property<DateTime>("LastModified");
+}
+```
+
+Making DbContext responsible to insert or update the shadow properties data in transactions:
+```csharp
+public override int SaveChanges()
+{
+    ChangeTracker.DetectChanges();
+    var timestamp = DateTime.Now;
+    foreach (var entry in ChangeTracker.Entries()
+        .Where(e => e.State==EntityState.Added || e.State==EntityState.Modified))
+    {
+        entry.Property("LastModified").CurrentValue = timestamp;
+
+        if (entry.State==EntityState.Added)
+        {
+            entry.Property("Created").CurrentValue = timestamp;
+        }
+    }
+    return base.SaveChanges();
+}
+```
