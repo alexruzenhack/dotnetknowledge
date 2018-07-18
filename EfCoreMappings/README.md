@@ -282,6 +282,7 @@ public class Samurai
 ```
 
 Entity reflected in database:
+
 | Column Name | Data type |
 | ----------- | --------- |
 | Id | int |
@@ -588,3 +589,26 @@ _context.Samurais.Update(samurai);
 // Then SaveChanges
 _context.SaveChanges() // here the overridden method will identify the change in samurai state and for consequence, the state of PersonName as well
 ```
+
+## Scalar Functions
+
+* What is a database scalar functions?
+* Mapping a scalar function
+* Using the function in queries
+* Unit testing with certain types of scalar functions
+* Mapping database built-in scalar functions
+* Compare database function mapping to locally evaluated functions
+
+Scalar Function returns a single scalar value and it's also a read-only function, not design to alter the database. EF Core now support mapping user-defined scalar functions.
+
+Used to: Filter, Sort or retrieve simple data.
+
+### Database Views
+
+* Defining classes to receive view results
+* Querying against views
+* Force migrations to create view
+* Some "gotchas" to watch out for
+* Prepare for improved support in 2.1
+
+Use the database view on the model.
