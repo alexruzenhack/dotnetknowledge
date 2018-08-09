@@ -15,11 +15,14 @@ namespace IdentityCore.Controllers
     public class HomeController : Controller
     {
 
-        private readonly UserManager<IdentityCoreUser> userManager;
+        private readonly UserManager<IdentityUser> userManager;
+        private readonly IUserClaimsPrincipalFactory<IdentityUser> claimsPrincipalFactory;
 
-        public HomeController(UserManager<IdentityCoreUser> userManager)
+        public HomeController(UserManager<IdentityUser> userManager,
+            IUserClaimsPrincipalFactory<IdentityUser> claimsPrincipalFactory)
         {
             this.userManager = userManager;
+            this.claimsPrincipalFactory = claimsPrincipalFactory;
         }
 
         public IActionResult Index()
@@ -67,19 +70,21 @@ namespace IdentityCore.Controllers
             {
                 var user = await userManager.FindByNameAsync(model.UserName);
 
-                if (user != null)
+                if (user == null)
                 {
-                    user = new IdentityCoreUser
+                    user = new IdentityUser
                     {
                         Id = Guid.NewGuid().ToString(),
                         UserName = model.UserName
                     };
+
+                    var result = await userManager.CreateAsync(user, model.Password);
                 }
 
-                var result = await userManager.CreateAsync(user, model.Password);
+                return View("Success");
             }
 
-            return View("Success");
+            return View();
         }
 
         [HttpGet]
@@ -98,11 +103,15 @@ namespace IdentityCore.Controllers
 
                 if (user != null && await userManager.CheckPasswordAsync(user, model.Password))
                 {
-                    var identity = new ClaimsIdentity("cookies");
-                    identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, user.Id));
-                    identity.AddClaim(new Claim(ClaimTypes.Name, user.UserName));
+                    //    var identity = new ClaimsIdentity("Identity.Application");
+                    //identity.AddClaim(new Claim(ClaimTypes.NameIdentifier, user.Id));
+                    //identity.AddClaim(new Claim(ClaimTypes.Name, user.UserName));
 
-                    await HttpContext.SignInAsync("cookies", new ClaimsPrincipal(identity));
+                    //await HttpContext.SignInAsync("Identity.Application", new ClaimsPrincipal(identity));
+
+                    var principal = await claimsPrincipalFactory.CreateAsync(user);
+
+                    await HttpContext.SignInAsync("Identity.Application", principal);
 
                     return RedirectToAction("Index");
                 }
